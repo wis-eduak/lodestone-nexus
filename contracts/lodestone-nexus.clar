@@ -60,3 +60,59 @@
     staking-rewards: uint,
   }
 )
+
+(define-map nft-staking
+  { token-id: (buff 32) }
+  {
+    staked-by: principal,
+    stake-start-block: uint,
+    total-staked-blocks: uint,
+  }
+)
+
+(define-map governance-tokens
+  principal
+  uint
+)
+
+;; Read-only views
+(define-read-only (get-nft-metadata (token-id (buff 32)))
+  (begin
+    (asserts! (is-valid-token-id token-id) none)
+    (map-get? nft-metadata { token-id: token-id })
+  )
+)
+
+(define-read-only (get-governance-tokens (user principal))
+  (default-to u0 (map-get? governance-tokens user))
+)
+
+;; Mint: create an NFT with validated metadata
+(define-public (mint-nft
+    (token-id (buff 32))
+    (asset-type (string-utf8 50))
+    (asset-value uint)
+  )
+  (begin
+    (asserts! (is-valid-token-id token-id) ERR-INVALID-TOKEN)
+    (asserts! (is-valid-asset-type asset-type) ERR-INVALID-INPUT)
+    (asserts! (is-valid-asset-value asset-value) ERR-INVALID-INPUT)
+
+    (asserts! (is-none (nft-get-owner? bitcoin-backed-nft token-id))
+      ERR-ALREADY-MINTED
+    )
+
+    (try! (nft-mint? bitcoin-backed-nft token-id tx-sender))
+
+    (map-set nft-metadata { token-id: token-id } {
+      owner: tx-sender,
+      asset-type: asset-type,
+      asset-value: asset-value,
+      mint-timestamp: stacks-block-height,
+      staking-start: none,
+      staking-rewards: u0,
+    })
+
+    (ok token-id)
+  )
+)
